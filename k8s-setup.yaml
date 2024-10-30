@@ -1,0 +1,333 @@
+# Astronomer (Apache Airflow)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: astronomer-airflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: astronomer-airflow
+  template:
+    metadata:
+      labels:
+        app: astronomer-airflow
+    spec:
+      containers:
+      - name: astronomer-airflow
+        image: astronomerinc/ap-airflow:2.2.0  # Substitua pela versão desejada
+        ports:
+        - containerPort: 8080
+        env:
+        - name: AIRFLOW__CORE__EXECUTOR
+          value: "LocalExecutor"  # Ou "CeleryExecutor" se você estiver usando o Celery
+        - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+          value: "postgresql+psycopg2://airflow_user:airflow_password@postgres:5432/airflow_db"  # String de conexão do PostgreSQL
+        - name: AIRFLOW__PULSAR__BROKER_URL
+          value: "pulsar://pulsar:6650"  # URL do broker do Pulsar
+        volumeMounts:
+        - name: airflow-data
+          mountPath: /usr/local/airflow  # Caminho onde os dados do Airflow serão armazenados
+      volumes:
+      - name: airflow-data
+        persistentVolumeClaim:
+          claimName: airflow-pvc  # PVC que será criado abaixo
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: astronomer-airflow
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 8080
+    targetPort: 8080
+  selector:
+    app: astronomer-airflow
+
+# Briefer
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: briefer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: briefer
+  template:
+    metadata:
+      labels:
+        app: briefer
+    spec:
+      containers:
+      - name: briefer
+        image: your-briefer-image:latest  # Substitua pela imagem do Briefer
+        ports:
+        - containerPort: 8081  # Altere conforme necessário
+        env:
+        - name: PULSAR_BROKER_URL
+          value: "pulsar://pulsar:6650"  # URL do broker do Pulsar
+        volumeMounts:
+        - name: briefer-data
+          mountPath: /data  # Caminho onde os dados do Briefer serão armazenados
+      volumes:
+      - name: briefer-data
+        persistentVolumeClaim:
+          claimName: briefer-pvc  # PVC que será criado abaixo
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: briefer
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 8081
+    targetPort: 8081
+  selector:
+    app: briefer
+
+# Spark com Delta Lake
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spark
+  template:
+    metadata:
+      labels:
+        app: spark
+    spec:
+      containers:
+      - name: spark
+        image: bitnami/spark:latest  # Substitua pela imagem do Spark com Delta Lake
+        ports:
+        - containerPort: 7077  # Porta do master do Spark
+        - containerPort: 8080  # Porta do UI do Spark
+        env:
+        - name: PULSAR_BROKER_URL
+          value: "pulsar://pulsar:6650"  # URL do broker do Pulsar
+        volumeMounts:
+        - name: spark-data
+          mountPath: /data  # Caminho onde os dados do Spark serão armazenados
+      volumes:
+      - name: spark-data
+        persistentVolumeClaim:
+          claimName: spark-pvc  # PVC que será criado abaixo
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spark
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 7077
+    targetPort: 7077
+  - port: 8080
+    targetPort: 8080
+  selector:
+    app: spark
+
+# Apache Pulsar
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pulsar
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pulsar
+  template:
+    metadata:
+      labels:
+        app: pulsar
+    spec:
+      containers:
+      - name: pulsar
+        image: apachepulsar/pulsar:latest  # Substitua pela imagem do Pulsar
+        ports:
+        - containerPort: 6650  # Porta do broker do Pulsar
+        - containerPort: 8080  # Porta do REST API do Pulsar
+        command: ["/bin/bash", "-c", "bin/pulsar standalone"]  # Comando para iniciar o Pulsar
+        volumeMounts:
+        - name: pulsar-data
+          mountPath: /pulsar/data  # Caminho onde os dados do Pulsar serão armazenados
+      volumes:
+      - name: pulsar-data
+        persistentVolumeClaim:
+          claimName: pulsar-pvc  # PVC que será criado abaixo
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pulsar
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 6650
+    targetPort: 6650
+  - port: 8080
+    targetPort: 8080
+  selector:
+    app: pulsar
+
+# MLflow
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mlflow
+  template:
+    metadata:
+      labels:
+        app: mlflow
+    spec:
+      containers:
+      - name: mlflow
+        image: mlflow/mlflow:latest  # Substitua pela imagem do MLflow
+        ports:
+        - containerPort: 5000  # Porta do MLflow
+        env:
+        - name: MLFLOW_TRACKING_URI
+          value: "http://mlflow:5000"  # URL do MLflow
+        volumeMounts:
+        - name: mlflow-data
+          mountPath: /mlflow  # Caminho onde os dados do MLflow serão armazenados
+      volumes:
+      - name: mlflow-data
+        persistentVolumeClaim:
+          claimName: mlflow-pvc  # PVC que será criado abaixo
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 5000
+    targetPort: 5000
+  selector:
+    app: mlflow
+
+# Grafana
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:latest  # Substitua pela imagem do Grafana
+        ports:
+        - containerPort: 3000  # Porta do Grafana
+        env:
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: "admin"  # Senha do admin do Grafana
+        volumeMounts:
+        - name: grafana-data
+          mountPath: /var/lib/grafana  # Caminho onde os dados do Grafana serão armazenados
+      volumes:
+      - name: grafana-data
+        persistentVolumeClaim:
+          claimName: grafana-pvc  # PVC que será criado abaixo
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 3000
+    targetPort: 3000
+  selector:
+    app: grafana
+
+# Persistent Volume Claims
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: airflow-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi  # Tamanho do volume para o Airflow
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: briefer-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi  # Tamanho do volume para o Briefer
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: spark-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi  # Tamanho do volume para o Spark
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pulsar-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi  # Tamanho do volume para o Pulsar
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mlflow-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi  # Tamanho do volume para o MLflow
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi  # Tamanho do volume para o Grafana
